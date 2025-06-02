@@ -1,6 +1,7 @@
 using IdentityManager.Models;
 using IdentityManager.Models.ViewModels;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IdentityManager.Controllers
@@ -10,17 +11,17 @@ namespace IdentityManager.Controllers
         // Felder
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly SignInManager<ApplicationUser> _signInManager;
-
-
+        private readonly IEmailSender _emailSender;
 
 
         // Konstructor
-        public AccountController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager)
+        public AccountController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager,
+            IEmailSender emailSender)
         {
             _signInManager = signInManager;
             _userManager = userManager;
+            _emailSender = emailSender;
         }
-
 
 
 
@@ -52,6 +53,16 @@ namespace IdentityManager.Controllers
                 var result = await _userManager.CreateAsync(user, model.Password);
                 if (result.Succeeded)
                 {
+                    var code = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                    var callbackurl = Url.Action("ConfirmEmail", "Account", new
+                    {
+                        userid = user.Id,
+                        code
+                    }, protocol: HttpContext.Request.Scheme);
+
+                    await _emailSender.SendEmailAsync(model.Email, "Confirm Email - Identity Manager",
+                                           $"Please confirm your email by clicking here: <a href='{callbackurl}'>link</a>");
+
                     await _signInManager.SignInAsync(user, isPersistent: false);
                     LocalRedirect(returnurl);
                 }
@@ -67,9 +78,6 @@ namespace IdentityManager.Controllers
                 ModelState.AddModelError(string.Empty, error.Description);
             }
         }
-
-
-
 
         //Logout
         [HttpPost]
@@ -87,7 +95,6 @@ namespace IdentityManager.Controllers
             return View();
         }
 
-
         //Login POST
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -98,10 +105,14 @@ namespace IdentityManager.Controllers
             if (ModelState.IsValid)
             {
                 var result = await _signInManager.PasswordSignInAsync(model.Email, model.Password, model.RememberMe,
-                    lockoutOnFailure: false);
+                    lockoutOnFailure: true);
                 if (result.Succeeded)
                 {
                     return LocalRedirect(returnurl);
+                }
+                if (result.IsLockedOut)
+                {
+                    return View("Lockout");
                 }
                 else
                 {
@@ -111,6 +122,111 @@ namespace IdentityManager.Controllers
             }
             return View(model);
         }
-    }
 
+        [HttpGet]
+        public IActionResult Lockout()
+        {
+            return View();
+        }
+
+
+        [HttpGet]
+        public IActionResult ForgotPassword()
+        {
+            return View();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
+        {
+            if (ModelState.IsValid)
+            {
+                var user = await _userManager.FindByEmailAsync(model.Email);
+                if (user == null)
+                {
+                    return RedirectToAction("ForgotPasswordConfirmation");
+                }
+                var code = await _userManager.GeneratePasswordResetTokenAsync(user);
+                var callbackurl = Url.Action("ResetPassword", "Account", new
+                {
+                    userid = user.Id,
+                    code
+                }, protocol: HttpContext.Request.Scheme);
+
+                await _emailSender.SendEmailAsync(model.Email, "Reset Password - Identity Manager",
+                                       $"Please reset your password by clicking here: <a href='{callbackurl}'>link</a>");
+
+            }
+            return View(model);
+        }
+
+
+        [HttpGet]
+        public IActionResult ResetPassword(string code = null)
+        {
+            return code == null ? View("Error") : View();
+        }
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResetPassword(ResetPasswordViewModel model)
+        {
+            if (ModelState.IsValid)
+            {
+                var user = await _userManager.FindByEmailAsync(model.Email);
+                if (user == null)
+                {
+                    return RedirectToAction(nameof(ResetPasswordConfirmation));
+                }
+
+                var result = await _userManager.ResetPasswordAsync(user, model.Code, model.Password);
+                if (result.Succeeded)
+                {
+                    return RedirectToAction(nameof(ResetPasswordConfirmation));
+                }
+                AddErrors(result);
+            }
+            return View();
+        }
+
+        [HttpGet]
+        public IActionResult ResetPasswordConfirmation()
+        {
+            return View();
+        }
+
+        [HttpGet]
+        public IActionResult ForgotPasswordConfirmation()
+        {
+            return View();
+        }
+
+
+        [HttpGet]
+        public async Task<IActionResult> ConfirmEmail(string code, string userId)
+        {
+            if (ModelState.IsValid)
+            {
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                {
+                    return View("Error");
+                }
+
+                var result = await _userManager.ConfirmEmailAsync(user, code);
+                if (result.Succeeded)
+                {
+                    return View();
+                }
+
+            }
+            return View("Error");
+        }
+
+        [HttpGet]
+        public IActionResult Error()
+        {
+            return View();
+        }
+    }
 }

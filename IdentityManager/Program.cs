@@ -1,6 +1,8 @@
 using IdentityManager.Data;
 using IdentityManager.Models;
+using IdentityManager.Services;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,8 +18,21 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
-                           .AddEntityFrameworkStores<ApplicationDbContext>();
+                         .AddEntityFrameworkStores<ApplicationDbContext>()
+                         .AddDefaultTokenProviders();
 
+builder.Services.Configure<IdentityOptions>(opt =>
+{
+    opt.Password.RequireDigit = false;
+    opt.Password.RequireLowercase = false;
+    opt.Password.RequireNonAlphanumeric = false;
+    opt.Lockout.MaxFailedAccessAttempts = 3;
+    opt.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromDays(10000);
+    opt.SignIn.RequireConfirmedEmail = false;
+
+});
+
+builder.Services.AddTransient<IEmailSender, EmailSender>();
 
 
 
