@@ -1,5 +1,6 @@
 using IdentityManager.Data;
 using IdentityManager.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
@@ -71,6 +72,7 @@ namespace IdentityManager.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [Authorize(Policy = "OnlySuperAdminChecker")]
         public async Task<IActionResult> Delete(string roleId)
         {
 
@@ -87,7 +89,10 @@ namespace IdentityManager.Controllers
                 var result = await _roleManager.DeleteAsync(objFromDb);
                 TempData[SD.Success] = "Role deleted successfully";
             }
-            TempData[SD.Error] = "Role not found.";
+            else
+            {
+                TempData[SD.Error] = "Role not found.";
+            }
             return RedirectToAction(nameof(Index));
         }
 

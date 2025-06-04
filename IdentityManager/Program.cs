@@ -1,6 +1,10 @@
+using IdentityManager;
+using IdentityManager.Authorize;
 using IdentityManager.Data;
 using IdentityManager.Models;
 using IdentityManager.Services;
+using IdentityManager.Services.IServices;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
@@ -35,13 +39,56 @@ builder.Services.Configure<IdentityOptions>(opt =>
 });
 
 builder.Services.AddTransient<IEmailSender, EmailSender>();
+builder.Services.AddScoped<INumberOfDaysForAccount, NumberOfDaysForAccount>();
+builder.Services.AddScoped<IAuthorizationHandler, AdminWithOver1000DaysHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, FirstNameAuthHandler>();
+
 
 builder.Services.ConfigureApplicationCookie(opt =>
 {
     opt.AccessDeniedPath = new PathString("/Account/NoAccess");
 });
 
+builder.Services.AddAuthorization(opt =>
+{
+    opt.AddPolicy("Admin", policy => policy.RequireRole(SD.Admin));
+    opt.AddPolicy("AdminAndUser", policy => policy.RequireRole(SD.Admin).RequireRole(SD.User));
+    opt.AddPolicy("AdminRole_CreateClaim", policy => policy.RequireRole(SD.Admin).RequireClaim("create", "True"));
+    opt.AddPolicy("AdminRole_CreateEditDeleteClaim", policy => policy
+                  .RequireRole(SD.Admin)
+                  .RequireClaim("create", "True")
+                  .RequireClaim("edit", "True")
+                  .RequireClaim("delete", "True")
+               );
+    opt.AddPolicy("AdminRole_CreateEditDeleteClaim_ORSuperAdminRole", policy => policy.RequireAssertion(context =>
+     AdminRole_CreateEditDeleteClaim_ORSuperAdminRole(context)
+    ));
+    opt.AddPolicy("OnlySuperAdminChecker", p => p.Requirements.Add(new OnlySuperAdminChecker()));
+    opt.AddPolicy("AdminWithMoreThan1000Days", p => p.Requirements.Add(new AdminWithMoreThan1000DaysRequirement(1000)));
+});
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+bool AdminRole_CreateEditDeleteClaim_ORSuperAdminRole(AuthorizationHandlerContext context)
+{
+    return (
+        context.User.IsInRole(SD.Admin) && context.User.HasClaim(c => c.Type == "Create" && c.Value == "True")
+        && context.User.HasClaim(c => c.Type == "Edit" && c.Value == "True")
+        && context.User.HasClaim(c => c.Type == "Delete" && c.Value == "True")
+    )
+    || context.User.IsInRole(SD.SuperAdmin);
+}
 ///////////////////////////////////////////////////
 
 

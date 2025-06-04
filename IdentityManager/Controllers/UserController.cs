@@ -22,7 +22,7 @@ namespace IdentityManager.Controllers
         }
 
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
             var userList = _db.ApplicationUser.ToList();
             var userRole = _db.UserRoles.ToList();
@@ -30,15 +30,11 @@ namespace IdentityManager.Controllers
 
             foreach (var user in userList)
             {
-                var user_role = userRole.FirstOrDefault(u => u.UserId == user.Id);
-                if (user_role == null)
-                {
-                    user.Role = "none";
-                }
-                else
-                {
-                    user.Role = roles.FirstOrDefault(u => u.Id == user_role.RoleId).Name;
-                }
+                var user_role = await _userManager.GetRolesAsync(user) as List<string>;
+                user.Role = String.Join(",", user_role);
+
+                var user_claim = _userManager.GetClaimsAsync(user).GetAwaiter().GetResult().Select(u => u.Type);
+                user.UserClaim = String.Join(",", user_claim);
             }
 
             return View(userList);
